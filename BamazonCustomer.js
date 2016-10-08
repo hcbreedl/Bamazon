@@ -14,113 +14,116 @@ connection.connect(function (err){
 	// console.log('connected as id', connection.threadId);
 });
 
-var enteredUnits = 0;
-var product = '';
-var productString = '';
-var amount = 0;
-var price = 0;
-var total = price * enteredUnits;
-var newAmount = amount - enteredUnits;
+var productSelection = '';
+var amountToBuy = 0;
 
-var updateStock = function() {
-	var userInput = [
-			    {
-			      type: 'input',
-			      name: 'confirm',
-			      message: 'Are you sure you want to make this purchase?',
-			      default: 'y/n'
-			    }
-	];
-	inquirer.prompt(userInput, function(answers) {
-			}).then(function (answers) {
-				if (answers.confirm == 'y') {
-					update();
-				}
-			});
+// Function to end program
+var end = function() {
+	connection.end(function (err) {
+		if (err) throw err;
+	});
 };
 
-var update = function () {
-	connection.query('UPDATE Products SET ? WHERE ?', [{
-	   	StockQuantity: 30
-	}, {ProductName: 'snacks'}], function(err, res) {
+// Function to log out 'Welcome to bamazon' and list of inventory
+var bamazon = function() {
+	console.log('-----------------------------------------');
+	console.log('---------- Welcome To BAMAZON! ----------');
+	console.log('- Products to purchase/Stock Quantities -');
+	console.log('-----------------------------------------');
+
+	connection.query('SELECT * FROM Products', function(err, res) {
 		if (err) throw err;
-		console.log('success!');
-	});
-}
+		for(i=0; i<res.length; i++) {
+			
+			console.log('Product ', i+1 + ': ', res[i].ProductName);
+			console.log('Stock Quantity: ', res[i].StockQuantity);
+			console.log('-----------------------------------------');
+		}
+	// Function to make purchase from Bamazon
+	userEntry();
+	})
+};
 
-var userEntry = function() {
-	connection.query('SELECT * FROM Bamazon.Products', function (err, results) {
-			if (err) throw err;
-			// console.log(results);
-
-			var userInput = [
-			    {
-			      type: 'input',
-			      name: 'item',
-			      message: 'What item would you like to buy?',
-			      default: ''
-			    },
-			    {
-			      type: 'input',
-			      name: 'units',
-			      message: 'How many units would you like?',
-			      default: ''
-			    }
-			];	
-
-			inquirer.prompt(userInput, function(answers) {
-			}).then(function (answers) {
-				console.log('------------------------------');
-				console.log('Thank you for your submission.');
-				console.log('------------------------------');
-
-				enteredUnits = answers.units;
-
-				for(i = 0; i < results.length; i++) {
-					if ((answers.item) == (results[i].ProductName) && (results[i].StockQuantity > 0)) {
-						product = results[i].ProductName;
-						productString = JSON.stringify(results[i].ProductName);
-						amount = results[i].StockQuantity;
-						price = results[i].Price;
-						total = price * enteredUnits;
-						newAmount = amount - enteredUnits;
-				
-						console.log('You purchased: ', results[i].ProductName);
-						console.log('Previous Amount: ', amount);
-						console.log('New Amount: ', newAmount);
-						console.log('Total cost of purchase: $' + total);
-
-						
-
-						// connection.query('UPDATE Products SET ? WHERE ?', [{
-						// 	   	StockQuantity: newAmount
-						// 	}, {ProductName: productString}], function(err, res) {
-						// 		if (err) throw err;
-						// 		console.log('success!');
-						// 	});
-
-						// connection.query('UPDATE Products SET ? WHERE ?', [{
-						//    	StockQuantity: 50
-						// }, {ProductName: 'snacks'}], function(err, res) {
-						// 	if (err) throw err;
-						// 	console.log('success!');
-						// });
-
-						updateStock();
-
-
-					} else if ((answers.item) == (results[i].ProductName) && (results[i].StockQuantity <= 0)) {
-						console.log('Insufficient Inventory!');
-					};
-				};
-
-			});	
+// Function prompting if user is ready
+var welcome = function() {
+	var welcomeList = [
+		{
+	      type: 'input',
+	      name: 'ready',
+	      message: 'Ready to make a purchase?',
+	      default: 'y/n'
+	    }
+	];
+	inquirer.prompt(welcomeList)
+		.then(function (answers) {
+			// Upon user selecting 'y' a list of all products and current stock quantity are listed.
+			if (answers.ready == 'y') {	
+				bamazon();	
+			} else {
+				console.log('');
+				console.log('     Have a great day!');
+				console.log('');
+			}
 		});
-}
+};
 
-userEntry();
-// update();
+// Purchase/Update function
+var userEntry = function() {
+	var productSelect = [{
+	  type: "input",
+	  name: "products",
+	  message: "Select a product to purchase: ",
+	  default: ''
+	},
+	{
+      type: 'input',
+      name: 'amount',
+      message: 'How many would you like?',
+      default: ''
+    }];
 
-connection.end(function (err) {
-	if (err) throw err;
-});
+    //Prompts user for which product to purchase and then how many they would like to purchase.
+	inquirer.prompt(productSelect)
+		.then(function (answers) {
+			productSelection = answers.products;
+			amountToBuy = answers.amount;
+			var inStock = 0;
+			var adjust = 0;
+			var price = 0;
+
+			// Read: necessary to get the proper price for selected item
+			connection.query('SELECT * FROM Products', function(err, res) {
+				if (err) throw err;
+
+				for(i=0; i < res.length; i++) {
+					if ((productSelection == res[i].ProductName) && (res[i].StockQuantity > amountToBuy)) {
+						
+						inStock = res[i].StockQuantity;
+						adjust = inStock - amountToBuy;
+						price = res[i].Price * amountToBuy;
+
+						//Update stock to Bamazon
+						connection.query('UPDATE Products SET StockQuantity = ' + adjust + ' WHERE ProductName = ?', [""+productSelection+""], function(err, res) {
+							if (err) throw err;
+							console.log('');
+							console.log('     Successful Purchase!');
+							console.log('     Purchase Total: ', price);
+							console.log('');
+							end();
+						});
+					} else if ((productSelection == res[i].ProductName) && (res[i].StockQuantity < amountToBuy)) {
+						console.log('');
+						console.log('     Insufficient Inventory!');
+						console.log('');
+						end();
+					}
+				}
+			})
+	});
+};
+
+//Runs initial prompt
+welcome();
+
+
+
